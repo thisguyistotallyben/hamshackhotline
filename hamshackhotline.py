@@ -38,8 +38,34 @@ class HamshackHotline:
         pass
 
 
-    def start_database():
-        self.conn - sqlite3.connect(self.database)
+    def start_database(self):
+        self.conn = sqlite3.connect(self.args['database'])
         self.c = self.conn.cursor()
 
-        # TODO: make tables if they don't exist
+        # makes tables if needed
+        self.c.execute(f'''CREATE TABLE IF NOT EXISTS {self.args['user_table']} (
+                               record_number text,
+                               callsign text,
+                               name text,
+                               city text,
+                               state text,
+                               country text,
+                               network text,
+                               number text,
+                               ring_group text)''')
+
+        self.c.execute(f'''CREATE TABLE IF NOT EXISTS {self.args['bridge_table']} (
+                               record_number text,
+                               name text,
+                               public text,
+                               network text,
+                               bridge number)''')
+
+        self.conn.commit()
+
+
+    '''
+    fetches the newest data from the website
+
+    Note: Be nice to Hamshack Hotline here. Try to keep fetches low.
+    '''
