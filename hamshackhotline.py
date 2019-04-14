@@ -52,6 +52,12 @@ class HamshackHotline:
         self.c = self.conn.cursor()
 
         # makes tables if needed
+        self.make_users()
+        self.make_bridges()
+        self.make_features()
+
+
+    def make_users(self):
         self.c.execute(f'''CREATE TABLE IF NOT EXISTS {self.args['user_table']} (
                                record_number text,
                                callsign text,
@@ -62,7 +68,11 @@ class HamshackHotline:
                                network text,
                                number text,
                                ring_group text)''')
+        
+        self.conn.commit()
 
+
+    def make_bridges(self):
         self.c.execute(f'''CREATE TABLE IF NOT EXISTS {self.args['bridge_table']} (
                                record_number text,
                                name text,
@@ -70,6 +80,10 @@ class HamshackHotline:
                                network text,
                                bridge number)''')
 
+        self.conn.commit()
+
+
+    def make_features(self):
         self.c.execute(f'''CREATE TABLE IF NOT EXISTS {self.args['feature_table']} (
                                record_number text,
                                name text,
@@ -77,6 +91,18 @@ class HamshackHotline:
                                network text,
                                bridge number)''')
 
+        self.conn.commit()
+
+    def drop_users(self):
+        self.c.execute(f'''DROP TABLE {self.args['user_table']}''')
+        self.conn.commit()
+
+    def drop_bridges(self):
+        self.c.execute(f'''DROP TABLE {self.args['bridge_table']}''')
+        self.conn.commit()
+
+    def drop_features(self):
+        self.c.execute(f'''DROP TABLE {self.args['feature_table']}''')
         self.conn.commit()
 
 
@@ -90,11 +116,19 @@ class HamshackHotline:
         self.fetch_bridges()
         self.fetch_features()
 
+
     def fetch_users(self):
+        # reset table
+        self.drop_users()
+        self.make_users()
+
+        # request data
         page = requests.get(USERS_URL)
         
+        # convert page
         soup = BeautifulSoup(page.content, features='lxml')
 
+        # parse data
         e = []
         first = True
         for row in soup.find_all("tr"):
@@ -109,18 +143,66 @@ class HamshackHotline:
                     e.append('')
                 else:
                     e.append(col.contents[0])
-
-            # PLEASE FOR THE LOVE OF EVERYTHING
-            # DON'T LET THIS DUPLICATE ENTRIES
-            # NOT COMMITING TO DATABASE BECAUSE OF THIS
-            self.c.execute(f"INSERT INTO {self.args['user_table']} VALUES ('{e[0]}', '{e[1]}', '{e[2]}', '{e[3]}', '{e[4]}', '{e[5]}', '{e[6]}', '{e[7]}', '{e[8]}')")
+            
+            self.c.execute(f"""INSERT INTO
+                                   {self.args['user_table']}
+                               VALUES (
+                                   '{e[0]}',
+                                   '{e[1]}',
+                                   '{e[2]}',
+                                   '{e[3]}',
+                                   '{e[4]}',
+                                   '{e[5]}',
+                                   '{e[6]}',
+                                   '{e[7]}',
+                                   '{e[8]}')""")
             e.clear()
+        self.conn.commit()
+
 
     def fetch_bridges(self):
         pass
 
+
     def fetch_features(self):
         pass
+
+    
+    def clean_input(self, kwargs):
+        for i in kwargs:
+            kwargs[i] = kwargs[i].upper()
+
+
+    def get_labels(self):
+        labels = []
+        labels_raw = self.c.description
+        
+        for l in labels_raw:
+            labels.append(l[0])
+
+        return labels
+
+
+    def map_results(self):
+        results = self.c.fetchall()
+        labels = self.get_labels()
+        mapped_results = []
+
+        # error checking
+        if len(results) == 0:
+            print('here1')
+            return None
+        if len(labels) != len(results[0]):
+            print('here2')
+            return None
+
+        for res in results:
+            tmp = {}
+            for i in range(0, len(results[0])):
+                tmp[labels[i]] = res[i]
+            mapped_results.append(tmp)
+
+        return mapped_results
 
 
     '''
@@ -132,6 +214,7 @@ class HamshackHotline:
         name
     '''
     def query_users(self, **kwargs):
+        self.clean_input(kwargs)
         mult_args = False
         query_args = []
         query = f"SELECT * FROM {self.args['user_table']}"
@@ -155,6 +238,7 @@ class HamshackHotline:
         print(query)
         print(tuple(query_args))
 
-        self.c.execute(query, query_args)
+        self.c.execute(query, tuple(query_args))
 
-        return self.c.fetchall()
+        # objectify results and return
+        return self.map_results()
