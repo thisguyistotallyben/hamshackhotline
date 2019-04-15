@@ -13,6 +13,18 @@ from bs4 import BeautifulSoup
 
 
 USERS_URL = 'http://apps.wizworks.net:9091/results.php'
+BRIDGES_URL = 'http://apps.wizworks.net:9091/bridges.php'
+FEATURES_URL = 'http://apps.wizworks.net:9091/features.php'
+
+valid_lookup_users = ('record_number',
+                      'callsign',
+                      'name',
+                      'city',
+                      'state',
+                      'country',
+                      'network',
+                      'number',
+                      'ring_group')
 
 
 class HamshackHotline:
@@ -38,8 +50,6 @@ class HamshackHotline:
             kwargs['feature_table'] = 'hh_features'
 
         self.args = kwargs
-        print(self.args)
-
         self.start_database()
 
 
@@ -93,13 +103,16 @@ class HamshackHotline:
 
         self.conn.commit()
 
+
     def drop_users(self):
         self.c.execute(f'''DROP TABLE {self.args['user_table']}''')
         self.conn.commit()
 
+
     def drop_bridges(self):
         self.c.execute(f'''DROP TABLE {self.args['bridge_table']}''')
         self.conn.commit()
+
 
     def drop_features(self):
         self.c.execute(f'''DROP TABLE {self.args['feature_table']}''')
@@ -117,6 +130,9 @@ class HamshackHotline:
         self.fetch_features()
 
 
+    '''
+    Downloads Hamshack Hotline user directory page and parses site into the database
+    '''
     def fetch_users(self):
         # reset table
         self.drop_users()
@@ -167,12 +183,21 @@ class HamshackHotline:
     def fetch_features(self):
         pass
 
-    
+
+    '''
+    Capitalizes everything because that is how everything is currently stored
+    '''
     def clean_input(self, kwargs):
         for i in kwargs:
             kwargs[i] = kwargs[i].upper()
 
 
+    '''
+    Gets labels after a database query
+    Only works right after a query call
+
+    returns: array of strings
+    '''
     def get_labels(self):
         labels = []
         labels_raw = self.c.description
@@ -183,17 +208,22 @@ class HamshackHotline:
         return labels
 
 
+    '''
+    Takes results arrays and maps them with column labels
+
+    Kind of black magic because SQLite stores results somewhere.
+    The query does not happen here, but the results come here.
+
+    returns: None if number of columns does not match
+             Results as an array of maps
+    '''
     def map_results(self):
         results = self.c.fetchall()
         labels = self.get_labels()
         mapped_results = []
 
         # error checking
-        if len(results) == 0:
-            print('here1')
-            return None
         if len(labels) != len(results[0]):
-            print('here2')
             return None
 
         for res in results:
@@ -208,35 +238,41 @@ class HamshackHotline:
     '''
     Queries user table matching parameters from kwargs
 
-    possible kwargs:
-        callsign
-        number
-        name
+    returns: None if keys are incorrect
+             Array of results maps
     '''
     def query_users(self, **kwargs):
+        # error check keys
+        for key in kwargs.keys():
+            if key not in valid_lookup_users:
+                return None
+
+        return self.query(self.args['user_table'], kwargs)
+
+
+    def query_bridges(self, **kwargs):
+        pass
+
+
+    '''
+    General query function
+    Probably should not be called by user because
+      the table name must be known
+      and error checking is not done here
+    '''
+    def query(self, table, kwargs):
         self.clean_input(kwargs)
         mult_args = False
         query_args = []
-        query = f"SELECT * FROM {self.args['user_table']}"
+        query = f"SELECT * FROM {table}"
 
         # build string
         if len(kwargs) != 0:
-            print('building string')
-            if 'callsign' in kwargs:
-                query = f"{query} WHERE callsign=?"
-                query_args.append(kwargs['callsign'])
+            query = query + ' WHERE'
+            for key in kwargs:
+                query = f"{query}{' AND ' if mult_args else ' '}{key}=?"
+                query_args.append(kwargs[key])
                 mult_args = True
-            if 'number' in kwargs:
-                query = f"{query} {'AND ' if mult_args else ''}number=?"
-                query_args.append(kwargs['number'])
-                mult_args = True
-            if 'name' in kwargs:
-                query = f"{query} {'AND ' if mult_args else ''}name=?"
-                query_args.append(kwargs['name'])
-                mult_args = True
-
-        print(query)
-        print(tuple(query_args))
 
         self.c.execute(query, tuple(query_args))
 
